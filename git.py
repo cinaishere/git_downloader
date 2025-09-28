@@ -1,10 +1,11 @@
-
 import os
 import json
 import requests
 import time
 import shutil
 import webbrowser
+import sys
+import subprocess
 from datetime import datetime
 from tabulate import tabulate
 from tqdm import tqdm
@@ -18,6 +19,9 @@ init()
 HISTORY_FILE = "github_downloader_history.json"
 GITHUB_API_URL = "https://api.github.com/repos"
 DOWNLOADS_DIR = "downloads"
+REPO_URL = "https://github.com/cinaishere/git_downloader"
+SCRIPT_NAME = "git.py"
+UPDATE_SCRIPT_NAME = "git_update.py"
 
 # پاک کردن کنسول
 def clear_console():
@@ -57,8 +61,9 @@ def show_menu():
         ("1", "Download Repository"),
         ("2", "View Download History"),
         ("3", "Manage Downloads"),
-        ("4", "Update Announcement"),
-        ("5", "Exit")
+        ("4", "Check for Updates"),
+        ("5", "Update Announcement"),
+        ("6", "Exit")
     ]
     
     menu_content = ""
@@ -530,6 +535,102 @@ def announce_menu():
         
         input(f"\n{Fore.YELLOW}Press Enter to continue...{Style.RESET_ALL}")
 
+# بررسی وجود به‌روزرسانی
+def check_for_updates():
+    clear_console()
+    show_logo()
+    
+    print(f"\n{Fore.YELLOW}Checking for updates...{Style.RESET_ALL}")
+    
+    try:
+        # دریافت اطلاعات ریپازیتوری
+        repo_owner = "cinaishere"
+        repo_name = "git_downloader"
+        
+        # دریافت اطلاعات فایل git.py از ریپازیتوری
+        api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/{SCRIPT_NAME}"
+        response = requests.get(api_url)
+        response.raise_for_status()
+        file_info = response.json()
+        
+        # دریافت تاریخ آخرین تغییر فایل در گیت‌هاب
+        github_date_str = file_info.get('commit', {}).get('committer', {}).get('date', '')
+        github_date = datetime.strptime(github_date_str, "%Y-%m-%dT%H:%M:%SZ")
+        
+        # دریافت تاریخ تغییر فایل محلی
+        local_file_path = os.path.abspath(__file__)
+        local_mtime = os.path.getmtime(local_file_path)
+        local_date = datetime.fromtimestamp(local_mtime)
+        
+        print(f"\n{Fore.YELLOW}GitHub version: {github_date.strftime('%Y-%m-%d %H:%M:%S')}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Local version: {local_date.strftime('%Y-%m-%d %H:%M:%S')}{Style.RESET_ALL}")
+        
+        if github_date > local_date:
+            print(f"\n{Fore.GREEN}A new version is available!{Style.RESET_ALL}")
+            
+            choice = input(f"\n{Fore.YELLOW}Do you want to download the latest version? (y/n): {Style.RESET_ALL}").strip().lower()
+            if choice == 'y':
+                # دانلود فایل جدید
+                download_url = file_info.get('download_url', '')
+                print(f"\n{Fore.YELLOW}Downloading update...{Style.RESET_ALL}")
+                
+                try:
+                    response = requests.get(download_url)
+                    response.raise_for_status()
+                    
+                    # ذخیره فایل جدید با نام موقت
+                    with open(UPDATE_SCRIPT_NAME, 'wb') as f:
+                        f.write(response.content)
+                    
+                    print(f"\n{Fore.GREEN}Update downloaded successfully!{Style.RESET_ALL}")
+                    
+                    # ایجاد اسکریپت به‌روزرسانی
+                    create_update_script()
+                    
+                    print(f"\n{Fore.YELLOW}The application will restart after the update.{Style.RESET_ALL}")
+                    print(f"\n{Fore.YELLOW}Press Enter to continue...{Style.RESET_ALL}")
+                    input()
+                    
+                    # اجرای اسکریپت به‌روزرسانی و خروج از برنامه
+                    if platform.system() == 'Windows':
+                        subprocess.Popen(['update_script.bat'])
+                    else:
+                        subprocess.Popen(['bash', 'update_script.sh'])
+                    
+                    sys.exit(0)
+                except Exception as e:
+                    print(f"\n{Fore.RED}Error downloading update: {e}{Style.RESET_ALL}")
+            else:
+                print(f"\n{Fore.YELLOW}Update cancelled.{Style.RESET_ALL}")
+        else:
+            print(f"\n{Fore.GREEN}You are using the latest version!{Style.RESET_ALL}")
+    except Exception as e:
+        print(f"\n{Fore.RED}Error checking for updates: {e}{Style.RESET_ALL}")
+    
+    input(f"\n{Fore.YELLOW}Press Enter to continue...{Style.RESET_ALL}")
+
+# ایجاد اسکریپت به‌روزرسانی
+def create_update_script():
+    if platform.system() == 'Windows':
+        # ایجاد فایل بچ برای ویندوز
+        with open('update_script.bat', 'w') as f:
+            f.write('@echo off\n')
+            f.write('timeout /t 2 /nobreak > nul\n')
+            f.write(f'del "{SCRIPT_NAME}"\n')
+            f.write(f'ren "{UPDATE_SCRIPT_NAME}" "{SCRIPT_NAME}"\n')
+            f.write(f'start "" "{sys.executable}" "{SCRIPT_NAME}"\n')
+            f.write('del update_script.bat\n')
+    else:
+        # ایجاد فایل شل برای لینوکس/مک
+        with open('update_script.sh', 'w') as f:
+            f.write('#!/bin/bash\n')
+            f.write('sleep 2\n')
+            f.write(f'rm -f "{SCRIPT_NAME}"\n')
+            f.write(f'mv "{UPDATE_SCRIPT_NAME}" "{SCRIPT_NAME}"\n')
+            f.write(f'exec "{sys.executable}" "{SCRIPT_NAME}"\n')
+            f.write('rm -f update_script.sh\n')
+        os.chmod('update_script.sh', 0o755)
+
 # تابع اصلی
 def main():
     # ایجاد پوشه دانلودها اگر وجود ندارد
@@ -549,8 +650,10 @@ def main():
         elif choice == '3':
             manage_downloads()
         elif choice == '4':
-            announce_menu()
+            check_for_updates()
         elif choice == '5':
+            announce_menu()
+        elif choice == '6':
             print(f"\n{Fore.YELLOW}Goodbye!{Style.RESET_ALL}")
             break
         else:
