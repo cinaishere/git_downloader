@@ -548,14 +548,26 @@ def check_for_updates():
         repo_name = "git_downloader"
         
         # دریافت اطلاعات فایل git.py از ریپازیتوری
-        api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/{SCRIPT_NAME}"
+        api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/commits?path={SCRIPT_NAME}"
         response = requests.get(api_url)
         response.raise_for_status()
-        file_info = response.json()
+        commits = response.json()
+        
+        if not commits:
+            print(f"\n{Fore.RED}No commit history found for the file.{Style.RESET_ALL}")
+            input(f"\n{Fore.YELLOW}Press Enter to continue...{Style.RESET_ALL}")
+            return
         
         # دریافت تاریخ آخرین تغییر فایل در گیت‌هاب
-        github_date_str = file_info.get('commit', {}).get('committer', {}).get('date', '')
-        github_date = datetime.strptime(github_date_str, "%Y-%m-%dT%H:%M:%SZ")
+        latest_commit = commits[0]
+        commit_date_str = latest_commit.get('commit', {}).get('committer', {}).get('date', '')
+        
+        if not commit_date_str:
+            print(f"\n{Fore.RED}Could not retrieve commit date from GitHub.{Style.RESET_ALL}")
+            input(f"\n{Fore.YELLOW}Press Enter to continue...{Style.RESET_ALL}")
+            return
+        
+        github_date = datetime.strptime(commit_date_str, "%Y-%m-%dT%H:%M:%SZ")
         
         # دریافت تاریخ تغییر فایل محلی
         local_file_path = os.path.abspath(__file__)
@@ -570,6 +582,12 @@ def check_for_updates():
             
             choice = input(f"\n{Fore.YELLOW}Do you want to download the latest version? (y/n): {Style.RESET_ALL}").strip().lower()
             if choice == 'y':
+                # دریافت اطلاعات فایل برای دانلود
+                file_api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/{SCRIPT_NAME}"
+                file_response = requests.get(file_api_url)
+                file_response.raise_for_status()
+                file_info = file_response.json()
+                
                 # دانلود فایل جدید
                 download_url = file_info.get('download_url', '')
                 print(f"\n{Fore.YELLOW}Downloading update...{Style.RESET_ALL}")
